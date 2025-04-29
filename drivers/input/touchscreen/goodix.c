@@ -30,7 +30,6 @@
 #include <linux/acpi.h>
 #include <linux/of.h>
 #include <asm/unaligned.h>
-#include <linux/jiffies.h>
 
 struct goodix_ts_data {
 	struct i2c_client *client;
@@ -303,18 +302,11 @@ static void goodix_process_events(struct goodix_ts_data *ts)
  * @irq: interrupt number.
  * @dev_id: private data pointer.
  */
-static unsigned long last_report_time = 0; 
-
 static irqreturn_t goodix_ts_irq_handler(int irq, void *dev_id)
 {
 	struct goodix_ts_data *ts = dev_id;
-	unsigned long now = jiffies;
-	
-	if (time_after(now, last_report_time + msecs_to_jiffies(100))) {
-	    goodix_process_events(ts);
-	
-	    last_report_time = now;
-	}
+
+	goodix_process_events(ts);
 
 	if (goodix_i2c_write_u8(ts->client, GOODIX_READ_COOR_ADDR, 0) < 0)
 		dev_err(&ts->client->dev, "I2C write end_cmd error\n");
