@@ -494,23 +494,20 @@ static void suspend_finish(void)
 static int enter_state(suspend_state_t state)
 {
 	int error;
-	
-	if (!mutex_trylock(&pm_mutex))
-		return -EBUSY;
 
 	trace_suspend_resume(TPS("suspend_enter"), state, true);
 	if (state == PM_SUSPEND_FREEZE) {
 #ifdef CONFIG_PM_DEBUG
 		if (pm_test_level != TEST_NONE && pm_test_level <= TEST_CPUS) {
 			pr_warn("PM: Unsupported test mode for suspend to idle, please choose none/freezer/devices/platform.\n");
-			mutex_unlock(&pm_mutex);
 			return -EAGAIN;
 		}
 #endif
 	} else if (!valid_state(state)) {
-		mutex_unlock(&pm_mutex);
 		return -EINVAL;
 	}
+	if (!mutex_trylock(&pm_mutex))
+		return -EBUSY;
 
 	if (state == PM_SUSPEND_FREEZE)
 		freeze_begin();
@@ -527,8 +524,7 @@ static int enter_state(suspend_state_t state)
 	pm_suspend_clear_flags();
 	error = suspend_prepare(state);
 	if (error)
-		mutex_unlock(&pm_mutex);
-		return error;
+		goto Unlock;
 
 	if (suspend_test(TEST_FREEZER))
 		goto Finish;
@@ -542,6 +538,7 @@ static int enter_state(suspend_state_t state)
  Finish:
 	pr_debug("PM: Finishing wakeup.\n");
 	suspend_finish();
+ Unlock:
 	mutex_unlock(&pm_mutex);
 	return error;
 }
