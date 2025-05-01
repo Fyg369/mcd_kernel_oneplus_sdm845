@@ -21,16 +21,15 @@
 #include <linux/vmalloc.h>
 #include <linux/zstd.h>
 
-#define zstd_def_level 3
 
 static uint __read_mostly compression_level = 1;
 module_param(compression_level, uint, 0644);
 
 struct zstd_ctx {
-    zstd_cctx *cctx;
-    zstd_dctx *dctx;
-    void *cwksp;
-    void *dwksp;
+	zstd_cctx *cctx;
+	zstd_dctx *dctx;
+	void *cwksp;
+	void *dwksp;
 };
 
 static zstd_parameters zstd_params(void)
@@ -42,92 +41,98 @@ static zstd_parameters zstd_params(void)
 	return zstd_get_params(compression_level, PAGE_SIZE);
 }
 
-static int zstd_comp_init(struct zstd_ctx *ctx) {
-    int ret = 0;
-    const zstd_parameters params = zstd_params();
-    const size_t wksp_size = zstd_cctx_workspace_bound(&params.cParams);
+static int zstd_comp_init(struct zstd_ctx *ctx)
+{
+	int ret = 0;
+	const zstd_parameters params = zstd_params();
+	const size_t wksp_size = zstd_cctx_workspace_bound(&params.cParams);
 
-    ctx->cwksp = vzalloc(wksp_size);
-    if (!ctx->cwksp) {
-        ret = -ENOMEM;
-        goto out;
-    }
+	ctx->cwksp = vzalloc(wksp_size);
+	if (!ctx->cwksp) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
-    ctx->cctx = zstd_init_cctx(ctx->cwksp, wksp_size);
-    if (!ctx->cctx) {
-        ret = -EINVAL;
-        goto out_free;
-    }
-
+	ctx->cctx = zstd_init_cctx(ctx->cwksp, wksp_size);
+	if (!ctx->cctx) {
+		ret = -EINVAL;
+		goto out_free;
+	}
 out:
-    return ret;
+	return ret;
 out_free:
-    vfree(ctx->cwksp);
-    goto out;
+	vfree(ctx->cwksp);
+	goto out;
 }
 
-static int zstd_decomp_init(struct zstd_ctx *ctx) {
-    int ret = 0;
-    size_t wksp_size = zstd_dctx_workspace_bound();
+static int zstd_decomp_init(struct zstd_ctx *ctx)
+{
+	int ret = 0;
+	const size_t wksp_size = zstd_dctx_workspace_bound();
 
-    ctx->dwksp = vzalloc(wksp_size);
-    if (!ctx->dwksp) {
-        ret = -ENOMEM;
-        goto out;
-    }
+	ctx->dwksp = vzalloc(wksp_size);
+	if (!ctx->dwksp) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
-    ctx->dctx = zstd_init_dctx(ctx->dwksp, wksp_size);
-    if (!ctx->dctx) {
-        ret = -EINVAL;
-        goto out_free;
-    }
-
+	ctx->dctx = zstd_init_dctx(ctx->dwksp, wksp_size);
+	if (!ctx->dctx) {
+		ret = -EINVAL;
+		goto out_free;
+	}
 out:
-    return ret;
+	return ret;
 out_free:
-    vfree(ctx->dwksp);
-    goto out;
+	vfree(ctx->dwksp);
+	goto out;
 }
 
-static void zstd_comp_exit(struct zstd_ctx *ctx) {
-    vfree(ctx->cwksp);
-    ctx->cwksp = NULL;
-    ctx->cctx = NULL;
+static void zstd_comp_exit(struct zstd_ctx *ctx)
+{
+	vfree(ctx->cwksp);
+	ctx->cwksp = NULL;
+	ctx->cctx = NULL;
 }
 
-static void zstd_decomp_exit(struct zstd_ctx *ctx) {
-    vfree(ctx->dwksp);
-    ctx->dwksp = NULL;
-    ctx->dctx = NULL;
+static void zstd_decomp_exit(struct zstd_ctx *ctx)
+{
+	vfree(ctx->dwksp);
+	ctx->dwksp = NULL;
+	ctx->dctx = NULL;
 }
 
-static int __zstd_init(void *ctx) {
-    int ret;
+static int __zstd_init(void *ctx)
+{
+	int ret;
 
-    ret = zstd_comp_init(ctx);
-    if (ret)
-        return ret;
-    ret = zstd_decomp_init(ctx);
-    if (ret)
-        zstd_comp_exit(ctx);
-    return ret;
+	ret = zstd_comp_init(ctx);
+	if (ret)
+		return ret;
+	ret = zstd_decomp_init(ctx);
+	if (ret)
+		zstd_comp_exit(ctx);
+	return ret;
 }
 
-static int zstd_init(struct crypto_tfm *tfm) {
-    struct zstd_ctx *ctx = crypto_tfm_ctx(tfm);
+static int zstd_init(struct crypto_tfm *tfm)
+{
+	struct zstd_ctx *ctx = crypto_tfm_ctx(tfm);
 
-    return __zstd_init(ctx);
+	return __zstd_init(ctx);
 }
 
-static void __zstd_exit(void *ctx) {
-    zstd_comp_exit(ctx);
-    zstd_decomp_exit(ctx);
+static void __zstd_exit(void *ctx)
+{
+	zstd_comp_exit(ctx);
+	zstd_decomp_exit(ctx);
 }
 
-static void zstd_exit(struct crypto_tfm *tfm) {
-    struct zstd_ctx *ctx = crypto_tfm_ctx(tfm);
+static void zstd_exit(struct crypto_tfm *tfm)
+{
+	struct zstd_ctx *ctx = crypto_tfm_ctx(tfm);
 
-    __zstd_exit(ctx);
+	__zstd_exit(ctx);
 }
 
 static int __zstd_compress(const u8 *src, unsigned int slen,
@@ -173,39 +178,37 @@ static int zstd_decompress(struct crypto_tfm *tfm, const u8 *src,
 	return __zstd_decompress(src, slen, dst, dlen, ctx);
 }
 
-
 static struct crypto_alg alg = {
-    .cra_name = "zstd",
-    .cra_flags = CRYPTO_ALG_TYPE_COMPRESS,
-    .cra_ctxsize = sizeof(struct zstd_ctx),
-    .cra_module = THIS_MODULE,
-    .cra_init = zstd_init,
-    .cra_exit = zstd_exit,
-    .cra_u = {
-        .compress = {
-            .coa_compress = zstd_compress,
-            .coa_decompress = zstd_decompress
-        }
-    }
+	.cra_name		= "zstd",
+	.cra_flags		= CRYPTO_ALG_TYPE_COMPRESS,
+	.cra_ctxsize		= sizeof(struct zstd_ctx),
+	.cra_module		= THIS_MODULE,
+	.cra_init		= zstd_init,
+	.cra_exit		= zstd_exit,
+	.cra_u			= { .compress = {
+	.coa_compress		= zstd_compress,
+	.coa_decompress		= zstd_decompress } }
 };
 
-static int __init zstd_mod_init(void) {
-    int ret;
+static int __init zstd_mod_init(void)
+{
+	int ret;
 
-    ret = crypto_register_alg(&alg);
-    if (ret)
-        return ret;
+	ret = crypto_register_alg(&alg);
+	if (ret)
+		return ret;
 
-    return ret;
+	return ret;
 }
 
-static void __exit zstd_mod_fini(void) {
-    crypto_unregister_alg(&alg);
+static void __exit zstd_mod_fini(void)
+{
+	crypto_unregister_alg(&alg);
 }
 
 module_init(zstd_mod_init);
 module_exit(zstd_mod_fini);
 
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Zstd Compression Algorithm");
 MODULE_ALIAS_CRYPTO("zstd");
